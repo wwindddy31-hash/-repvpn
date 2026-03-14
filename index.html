@@ -1,0 +1,1624 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>VPN Service</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap');
+
+:root {
+  --bg: #080b12;
+  --surface: #0f1320;
+  --surface2: #161c2e;
+  --surface3: #1d2540;
+  --border: #252d45;
+  --accent: #4fc3f7;
+  --accent2: #7c6fff;
+  --green: #43e87c;
+  --red: #ff4d6d;
+  --yellow: #ffd166;
+  --orange: #ff9f43;
+  --text: #e4ecff;
+  --text2: #6e7fa3;
+  --text3: #3d4d6a;
+  --r: 14px;
+  --r-sm: 8px;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body { background:var(--bg); color:var(--text); font-family:'Syne',sans-serif; min-height:100vh; overflow-x:hidden; }
+
+/* Grid bg */
+body::before {
+  content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+  background-image: linear-gradient(rgba(79,195,247,.04) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(79,195,247,.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* ── PAGE SYSTEM ── */
+.page { display:none; position:fixed; inset:0; overflow-y:auto; z-index:10; background:var(--bg); animation:slideIn .22s cubic-bezier(.4,0,.2,1); }
+.page.active { display:flex; flex-direction:column; }
+.page.back-anim { animation:slideOut .22s cubic-bezier(.4,0,.2,1) forwards; }
+@keyframes slideIn { from { opacity:0; transform:translateX(28px); } to { opacity:1; transform:translateX(0); } }
+@keyframes slideOut { from { opacity:1; transform:translateX(0); } to { opacity:0; transform:translateX(-28px); } }
+
+/* ── HEADER ── */
+.hdr {
+  position:sticky; top:0; z-index:100;
+  padding:14px 16px 12px;
+  background:rgba(8,11,18,.92);
+  backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:10px;
+}
+.hdr-back {
+  width:36px; height:36px; border-radius:50%; border:none;
+  background:var(--surface2); color:var(--text2); cursor:pointer;
+  display:flex; align-items:center; justify-content:center; font-size:18px;
+  flex-shrink:0;
+}
+.hdr-title { font-size:17px; font-weight:700; flex:1; }
+.hdr-badge {
+  font-family:'Space Mono',monospace; font-size:11px;
+  background:linear-gradient(135deg,var(--accent2),var(--accent));
+  color:#fff; padding:3px 8px; border-radius:20px;
+}
+
+/* ── BOTTOM NAV ── */
+.bnav {
+  position:fixed; bottom:0; left:0; right:0; z-index:200;
+  background:rgba(8,11,18,.95); backdrop-filter:blur(20px);
+  border-top:1px solid var(--border);
+  display:flex; padding:8px 0 max(8px,env(safe-area-inset-bottom));
+}
+.bnav-btn {
+  flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;
+  background:none; border:none; cursor:pointer; padding:6px 4px; color:var(--text3);
+  font-family:'Syne',sans-serif; font-size:10px; font-weight:600;
+  transition:color .2s;
+}
+.bnav-btn.active { color:var(--accent); }
+.bnav-btn svg { width:22px; height:22px; }
+.bnav-dot {
+  width:4px; height:4px; border-radius:50%; background:var(--accent);
+  opacity:0; transition:opacity .2s; margin-top:-2px;
+}
+.bnav-btn.active .bnav-dot { opacity:1; }
+
+/* ── CONTENT ── */
+.content { padding:16px 16px calc(80px + env(safe-area-inset-bottom)); flex:1; }
+
+/* ── CARDS ── */
+.card {
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--r);
+  padding:16px; margin-bottom:12px;
+}
+.card-glass {
+  background:linear-gradient(135deg,rgba(79,195,247,.06),rgba(124,111,255,.04));
+  border-color:rgba(79,195,247,.15);
+}
+
+/* ── STATUS BADGE ── */
+.status-badge {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:4px 10px; border-radius:20px; font-size:12px; font-weight:700;
+}
+.status-badge.active { background:rgba(67,232,124,.12); color:var(--green); border:1px solid rgba(67,232,124,.25); }
+.status-badge.inactive { background:rgba(255,77,109,.12); color:var(--red); border:1px solid rgba(255,77,109,.25); }
+.status-badge.frozen { background:rgba(79,195,247,.12); color:var(--accent); border:1px solid rgba(79,195,247,.25); }
+.status-badge .dot { width:6px; height:6px; border-radius:50%; background:currentColor; animation:pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.4;} }
+
+/* ── BUTTONS ── */
+.btn {
+  width:100%; padding:14px 20px; border-radius:var(--r); border:none; cursor:pointer;
+  font-family:'Syne',sans-serif; font-size:15px; font-weight:700;
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  transition:opacity .15s, transform .1s; position:relative; overflow:hidden;
+}
+.btn:active { transform:scale(.97); opacity:.9; }
+.btn-primary {
+  background:linear-gradient(135deg,var(--accent2),var(--accent));
+  color:#fff;
+  box-shadow:0 4px 24px rgba(79,195,247,.2);
+}
+.btn-secondary { background:var(--surface2); color:var(--text); border:1px solid var(--border); }
+.btn-danger { background:rgba(255,77,109,.12); color:var(--red); border:1px solid rgba(255,77,109,.25); }
+.btn-success { background:rgba(67,232,124,.12); color:var(--green); border:1px solid rgba(67,232,124,.25); }
+.btn-sm { padding:10px 16px; font-size:13px; border-radius:var(--r-sm); }
+.btn-row { display:flex; gap:8px; }
+.btn-row .btn { flex:1; }
+
+/* ── PLAN CARDS ── */
+.plan-card {
+  background:var(--surface); border:2px solid var(--border); border-radius:var(--r);
+  padding:16px; margin-bottom:10px; cursor:pointer; transition:border-color .2s, background .2s;
+  position:relative; overflow:hidden;
+}
+.plan-card:active { transform:scale(.98); }
+.plan-card.selected { border-color:var(--accent); background:rgba(79,195,247,.05); }
+.plan-card.popular::after {
+  content:'POPULAR'; position:absolute; top:10px; right:-18px;
+  background:linear-gradient(135deg,var(--accent2),var(--accent));
+  color:#fff; font-size:9px; font-weight:800; padding:3px 22px;
+  transform:rotate(35deg); letter-spacing:.06em;
+}
+.plan-name { font-size:16px; font-weight:800; margin-bottom:4px; }
+.plan-price { font-family:'Space Mono',monospace; font-size:22px; font-weight:700; color:var(--accent); }
+.plan-price span { font-size:13px; color:var(--text2); }
+.plan-details { display:flex; gap:12px; margin-top:8px; }
+.plan-tag { font-size:11px; color:var(--text2); background:var(--surface2); padding:3px 8px; border-radius:20px; }
+
+/* ── PROGRESS BAR ── */
+.progress-wrap { background:var(--surface3); border-radius:4px; height:8px; overflow:hidden; }
+.progress-fill { height:100%; border-radius:4px; background:linear-gradient(90deg,var(--accent2),var(--accent)); transition:width .6s ease; }
+.progress-fill.warn { background:linear-gradient(90deg,var(--yellow),var(--orange)); }
+.progress-fill.danger { background:linear-gradient(90deg,var(--orange),var(--red)); }
+
+/* ── STATS ROW ── */
+.stats-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.stat-box {
+  background:var(--surface2); border:1px solid var(--border); border-radius:var(--r-sm); padding:12px;
+  text-align:center;
+}
+.stat-val { font-family:'Space Mono',monospace; font-size:20px; font-weight:700; color:var(--accent); }
+.stat-lbl { font-size:11px; color:var(--text2); margin-top:2px; }
+
+/* ── INFO ROWS ── */
+.info-row { display:flex; justify-content:space-between; align-items:center; padding:11px 0; border-bottom:1px solid var(--border); }
+.info-row:last-child { border-bottom:none; }
+.info-lbl { font-size:13px; color:var(--text2); }
+.info-val { font-size:13px; font-weight:700; text-align:right; }
+
+/* ── INPUT ── */
+.input-wrap { margin-bottom:12px; }
+.input-wrap label { font-size:12px; color:var(--text2); margin-bottom:6px; display:block; font-weight:600; letter-spacing:.04em; }
+.inp {
+  width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:var(--r-sm);
+  padding:13px 14px; font-size:15px; color:var(--text); font-family:'Syne',sans-serif;
+  outline:none; transition:border-color .2s;
+}
+.inp:focus { border-color:var(--accent); }
+.inp::placeholder { color:var(--text3); }
+
+/* ── DEVICE GRID ── */
+.device-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.device-btn {
+  background:var(--surface2); border:2px solid var(--border); border-radius:var(--r);
+  padding:16px 12px; cursor:pointer; text-align:center; transition:border-color .2s, background .2s;
+}
+.device-btn:active { transform:scale(.96); }
+.device-btn.active { border-color:var(--accent); background:rgba(79,195,247,.05); }
+.device-btn .icon { font-size:28px; display:block; margin-bottom:6px; }
+.device-btn .name { font-size:13px; font-weight:700; }
+
+/* ── HISTORY ── */
+.tx-row {
+  display:flex; align-items:center; gap:12px; padding:11px 0; border-bottom:1px solid var(--border);
+}
+.tx-row:last-child { border-bottom:none; }
+.tx-icon { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+.tx-icon.credit { background:rgba(67,232,124,.15); }
+.tx-icon.debit { background:rgba(255,77,109,.15); }
+.tx-body { flex:1; min-width:0; }
+.tx-comment { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tx-date { font-size:11px; color:var(--text2); margin-top:1px; }
+.tx-amount { font-family:'Space Mono',monospace; font-size:13px; font-weight:700; white-space:nowrap; }
+.tx-amount.credit { color:var(--green); }
+.tx-amount.debit { color:var(--red); }
+
+/* ── PROMO ── */
+.promo-code-display {
+  font-family:'Space Mono',monospace; font-size:22px; letter-spacing:.12em;
+  color:var(--accent); background:var(--surface2); border:1px dashed var(--border);
+  border-radius:var(--r-sm); padding:14px; text-align:center; margin:12px 0;
+  cursor:pointer; transition:background .2s;
+}
+.promo-code-display:active { background:var(--surface3); }
+
+/* ── REFERRAL ── */
+.ref-link {
+  font-family:'Space Mono',monospace; font-size:11px; color:var(--text2);
+  background:var(--surface2); border:1px solid var(--border); border-radius:var(--r-sm);
+  padding:12px; word-break:break-all; line-height:1.5; margin:10px 0;
+}
+
+/* ── TOAST ── */
+#toast {
+  position:fixed; bottom:90px; left:50%; transform:translateX(-50%) translateY(20px);
+  background:var(--surface3); border:1px solid var(--border); color:var(--text);
+  padding:10px 20px; border-radius:24px; font-size:13px; font-weight:600;
+  z-index:999; white-space:nowrap; opacity:0; transition:all .25s; pointer-events:none;
+}
+#toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+/* ── LOADING ── */
+.loading { display:flex; align-items:center; justify-content:center; gap:8px; padding:32px; color:var(--text2); font-size:14px; }
+.spinner { width:20px; height:20px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* ── EMPTY STATE ── */
+.empty { text-align:center; padding:48px 24px; color:var(--text2); }
+.empty .big { font-size:40px; margin-bottom:12px; }
+.empty .title { font-size:16px; font-weight:700; color:var(--text); margin-bottom:6px; }
+.empty .sub { font-size:13px; line-height:1.5; }
+
+/* ── HERO ── */
+.hero {
+  background:linear-gradient(135deg,rgba(124,111,255,.12),rgba(79,195,247,.08));
+  border:1px solid rgba(79,195,247,.15); border-radius:var(--r); padding:20px 16px; margin-bottom:16px;
+  position:relative; overflow:hidden;
+}
+.hero::before {
+  content:''; position:absolute; top:-30px; right:-30px; width:120px; height:120px;
+  background:radial-gradient(circle,rgba(79,195,247,.12) 0%,transparent 70%); border-radius:50%;
+}
+.hero-title { font-size:22px; font-weight:800; margin-bottom:4px; }
+.hero-sub { font-size:13px; color:var(--text2); line-height:1.5; }
+.hero-price { font-family:'Space Mono',monospace; font-size:28px; font-weight:700; color:var(--accent); margin-top:8px; }
+
+/* ── SECTION TITLE ── */
+.section-title { font-size:12px; font-weight:700; color:var(--text2); letter-spacing:.08em; text-transform:uppercase; margin:20px 0 10px; }
+
+/* ── ALERT ── */
+.alert { padding:12px 14px; border-radius:var(--r-sm); font-size:13px; line-height:1.5; margin-bottom:12px; }
+.alert-info { background:rgba(79,195,247,.08); border:1px solid rgba(79,195,247,.2); color:var(--accent); }
+.alert-warn { background:rgba(255,209,102,.08); border:1px solid rgba(255,209,102,.2); color:var(--yellow); }
+.alert-danger { background:rgba(255,77,109,.08); border:1px solid rgba(255,77,109,.2); color:var(--red); }
+.alert-success { background:rgba(67,232,124,.08); border:1px solid rgba(67,232,124,.2); color:var(--green); }
+
+/* ── MODAL ── */
+.modal-overlay { display:none; position:fixed; inset:0; z-index:500; background:rgba(0,0,0,.7); backdrop-filter:blur(4px); align-items:flex-end; }
+.modal-overlay.open { display:flex; }
+.modal { background:var(--surface); border:1px solid var(--border); border-radius:24px 24px 0 0; padding:20px 16px calc(24px + env(safe-area-inset-bottom)); width:100%; animation:slideUp .25s ease; }
+@keyframes slideUp { from{transform:translateY(100%);} to{transform:translateY(0);} }
+.modal-handle { width:40px; height:4px; background:var(--border); border-radius:2px; margin:0 auto 16px; }
+.modal-title { font-size:17px; font-weight:800; margin-bottom:16px; }
+
+/* ── TOGGLE ── */
+.toggle-row { display:flex; align-items:center; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--border); }
+.toggle-row:last-child { border-bottom:none; }
+.toggle-lbl { font-size:14px; font-weight:600; }
+.toggle-sub { font-size:12px; color:var(--text2); margin-top:2px; }
+.toggle {
+  width:48px; height:26px; background:var(--surface3); border-radius:13px; cursor:pointer;
+  position:relative; border:none; transition:background .2s; flex-shrink:0;
+}
+.toggle.on { background:linear-gradient(135deg,var(--accent2),var(--accent)); }
+.toggle::after {
+  content:''; position:absolute; top:3px; left:3px; width:20px; height:20px;
+  background:#fff; border-radius:50%; transition:transform .2s; box-shadow:0 1px 4px rgba(0,0,0,.3);
+}
+.toggle.on::after { transform:translateX(22px); }
+
+/* ── ADMIN STATS ── */
+.admin-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px; }
+.admin-stat { background:var(--surface2); border:1px solid var(--border); border-radius:var(--r-sm); padding:14px; }
+.admin-stat .val { font-family:'Space Mono',monospace; font-size:22px; font-weight:700; }
+.admin-stat .lbl { font-size:11px; color:var(--text2); margin-top:3px; }
+.admin-stat.accent .val { color:var(--accent); }
+.admin-stat.green .val { color:var(--green); }
+.admin-stat.yellow .val { color:var(--yellow); }
+.admin-stat.red .val { color:var(--red); }
+
+/* ── USER ROW ── */
+.user-row { display:flex; align-items:center; gap:10px; padding:11px 0; border-bottom:1px solid var(--border); cursor:pointer; }
+.user-row:last-child { border-bottom:none; }
+.user-ava { width:38px; height:38px; border-radius:50%; background:linear-gradient(135deg,var(--accent2),var(--accent)); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px; flex-shrink:0; }
+.user-id { font-family:'Space Mono',monospace; font-size:12px; color:var(--text2); }
+.user-name { font-size:14px; font-weight:700; }
+.user-badge { font-size:10px; padding:2px 7px; border-radius:10px; font-weight:700; }
+.user-badge.ok { background:rgba(67,232,124,.15); color:var(--green); }
+.user-badge.exp { background:rgba(255,77,109,.15); color:var(--red); }
+.user-badge.frozen { background:rgba(79,195,247,.15); color:var(--accent); }
+</style>
+</head>
+<body>
+
+<div id="toast"></div>
+
+<!-- ══════════════════════════════════════════
+     PAGE: HOME
+══════════════════════════════════════════ -->
+<div class="page active" id="page-home">
+  <div class="content">
+    <div class="hero">
+      <div class="hero-title">🔐 VPN Service</div>
+      <div class="hero-sub">VLESS TCP REALITY · Военное шифрование</div>
+      <div class="hero-price">от 99₽<span style="font-size:14px;color:var(--text2)"> / неделя</span></div>
+    </div>
+
+    <!-- Sub status card -->
+    <div class="card card-glass" id="home-sub-card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
+        <div>
+          <div style="font-size:13px;color:var(--text2);margin-bottom:4px;">Статус подписки</div>
+          <div class="status-badge inactive" id="home-status-badge"><span class="dot"></span> Нет подписки</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:11px;color:var(--text2);">Баланс</div>
+          <div style="font-family:'Space Mono',monospace;font-size:18px;font-weight:700;color:var(--green);" id="home-balance">0₽</div>
+        </div>
+      </div>
+      <div id="home-sub-details" style="display:none;">
+        <div class="info-row" style="padding:7px 0;">
+          <span class="info-lbl">Истекает</span>
+          <span class="info-val" id="home-expire">—</span>
+        </div>
+        <div class="info-row" style="padding:7px 0;border-bottom:none;">
+          <span class="info-lbl">Трафик</span>
+          <span class="info-val" id="home-traffic">—</span>
+        </div>
+        <div style="margin-top:10px;" id="home-progress-wrap">
+          <div class="progress-wrap"><div class="progress-fill" id="home-progress-bar" style="width:0%"></div></div>
+        </div>
+      </div>
+      <div id="home-no-sub" style="text-align:center;padding:6px 0;font-size:13px;color:var(--text2);">
+        Оформите подписку для защиты трафика
+      </div>
+    </div>
+
+    <!-- Quick actions -->
+    <div class="section-title">Быстрые действия</div>
+    <div class="btn-row" style="margin-bottom:10px;">
+      <button class="btn btn-primary" onclick="nav('buy')">🛒 Купить</button>
+      <button class="btn btn-secondary" onclick="nav('subscription')">📋 Подписка</button>
+    </div>
+    <div class="btn-row" style="margin-bottom:10px;">
+      <button class="btn btn-secondary" onclick="nav('topup')">💳 Пополнить</button>
+      <button class="btn btn-secondary" onclick="nav('promo')">🎟 Промокод</button>
+    </div>
+
+    <!-- Features -->
+    <div class="section-title">Протокол</div>
+    <div class="card">
+      <div class="info-row"><span class="info-lbl">Протокол</span><span class="info-val" style="color:var(--accent);">VLESS TCP REALITY</span></div>
+      <div class="info-row"><span class="info-lbl">Шифрование</span><span class="info-val">Военный класс</span></div>
+      <div class="info-row"><span class="info-lbl">Серверы</span><span class="info-val">Без ограничений</span></div>
+      <div class="info-row"><span class="info-lbl">IP-адреса</span><span class="info-val">Ротация</span></div>
+    </div>
+
+    <div id="trial-btn-wrap">
+      <button class="btn btn-success" onclick="activateTrial()" id="trial-btn">🎁 Пробный период (1 день бесплатно)</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     PAGE: BUY
+══════════════════════════════════════════ -->
+<div class="page" id="page-buy">
+  <div class="hdr">
+    <button class="hdr-back" onclick="goBack()">←</button>
+    <div class="hdr-title">🛒 Выбор тарифа</div>
+    <div class="hdr-badge" id="buy-bal-badge">0₽</div>
+  </div>
+  <div class="content">
+    <div id="plan-7d" class="plan-card" onclick="selectPlan('7d')">
+      <div class="plan-name">Недельный</div>
+      <div class="plan-price">99₽ <span>/ 7 дней</span></div>
+      <div class="plan-details">
+        <span class="plan-tag">📦 30 ГБ</span>
+        <span class="plan-tag">⚡ REALITY</span>
+      </div>
+    </div>
+    <div id="plan-30d" class="plan-card popular" onclick="selectPlan('30d')">
+      <div class="plan-name">Месячный</div>
+      <div class="plan-price">249₽ <span>/ 30 дней</span></div>
+      <div class="plan-details">
+        <span class="plan-tag">📦 100 ГБ</span>
+        <span class="plan-tag">⚡ REALITY</span>
+      </div>
+    </div>
+    <div id="plan-90d" class="plan-card" onclick="selectPlan('90d')">
+      <div class="plan-name">Квартальный</div>
+      <div class="plan-price">599₽ <span>/ 90 дней</span></div>
+      <div class="plan-details">
+        <span class="plan-tag">📦 300 ГБ</span>
+        <span class="plan-tag">⚡ REALITY</span>
+        <span class="plan-tag">💎 -20%</span>
+      </div>
+    </div>
+
+    <div id="plan-confirm-block" style="display:none;margin-top:4px;">
+      <div class="card card-glass" id="plan-confirm-card" style="margin-bottom:12px;"></div>
+      <button class="btn btn-primary" id="btn-buy-balance" onclick="buyFromBalance()">✅ Купить с баланса</button>
+      <div style="height:10px;"></div>
+      <button class="btn btn-secondary" id="btn-topup-for-buy" onclick="nav('topup')">💳 Пополнить баланс</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     PAGE: SUBSCRIPTION
+══════════════════════════════════════════ -->
+<div class="page" id="page-subscription">
+  <div class="hdr">
+    <button class="hdr-back" onclick="goBack()">←</button>
+    <div class="hdr-title">📋 Моя подписка</div>
+    <button class="hdr-back" onclick="refreshSub()" style="margin-left:auto;">↻</button>
+  </div>
+  <div class="content" id="sub-content">
+    <div class="loading"><div class="spinner"></div>Загружаем...</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     PAGE: TOPUP
+══════════════════════════════════════════ -->
+<div class="page" id="page-topup">
+  <div class="hdr">
+    <button class="hdr-back" onclick="goBack()">←</button>
+    <div class="hdr-title">💳 Пополнение</div>
+  </div>
+  <div class="content">
+    <div class="card card-glass" style="text-align:center;padding:24px 16px;margin-bottom:16px;">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:4px;">Текущий баланс</div>
+      <div style="font-family:'Space Mono',monospace;font-size:36px;font-weight:700;color:var(--green);" id="topup-balance">0₽</div>
+    </div>
+
+    <div class="input-wrap">
+      <label>Сумма пополнения (₽)</label>
+      <input class="inp" type="number" id="topup-amount" placeholder="Например: 500" min="10">
+    </div>
+
+    <!-- Quick amounts -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px;">
+      <button class="btn btn-secondary btn-sm" onclick="setTopup(100)">100₽</button>
+      <button class="btn btn-secondary btn-sm" onclick="setTopup(250)">250₽</button>
+      <button class="btn btn-secondary btn-sm" onclick="setTopup(500)">500₽</button>
+      <button class="btn btn-secondary btn-sm" onclick="setTopup(1000)">1000₽</button>
+    </div>
+
+    <button class="btn btn-primary" onclick="createPayment('card')">💳 Оплатить картой</button>
+    <div style="height:10px;"></div>
+    <button class="btn btn-secondary" onclick="createPayment('sbp')">🏦 Оплатить через СБП</button>
+
+    <div class="section-title" style="margin-top:20px;">Как работает</div>
+    <div class="card">
+      <div class="info-row"><span class="info-lbl">⏱ Зачисление</span><span class="info-val">Мгновенно</span></div>
+      <div class="info-row"><span class="info-lbl">💱 Валюта</span><span class="info-val">Рубли (₽)</span></div>
+      <div class="info-row"><span class="info-lbl">🔒 Безопасность</span><span class="info-val">Platega</span></div>
+    </div>
+
+    <!-- Payment status -->
+    <div id="payment-status-block" style="display:none;">
+      <div class="alert alert-info" id="payment-status-text">⏳ Ожидаем оплату...</div>
+      <button class="btn btn-secondary btn-sm" onclick="checkPayment()">🔄 Проверить оплату</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     PAGE: PROFILE
+══════════════════════════════════════════ -->
+<div class="page" id="page-profile">
+  <div class="hdr">
+    <button class="hdr-back" onclick="goBack()">←</button>
+    <div class="hdr-title">👤 Профиль</div>
+  </div>
+  <div class="content">
+    <!-- User card -->
+    <div class="card card-glass" style="padding:20px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
+        <div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,var(--accent2),var(--accent));display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;" id="profile-avatar">?</div>
+        <div>
+          <div style="font-size:18px;font-weight:800;" id="profile-name">—</div>
+          <div style="font-family:'Space Mono',monospace;font-size:12px;color:var(--text2);" id="profile-id">ID: —</div>
+        </div>
+      </div>
+      <div class="stats-row">
+        <div class="stat-box"><div class="stat-val" id="profile-balance">0₽</div><div class="stat-lbl">Баланс</div></div>
+        <div class="stat-box"><div class="stat-val" id="profile-refs">0</div><div class="stat-lbl">Рефералов</div></div>
+      </div>
+    </div>
+
+    <div class="btn-row" style="margin-bottom:10px;">
+      <button class="btn btn-secondary" onclick="nav('topup')">💳 Пополнить</button>
+      <button class="btn btn-secondary" onclick="nav('history')">📜 История</button>
+    </div>
+    <button class="btn btn-secondary" style="margin-bottom:10px;" onclick="nav('referral')">👥 Реферальная программа</button>
+    <button class="btn btn-secondary" onclick="nav('settings')">⚙️ Настройки</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     PAGE: HISTORY
+══════════════════════════════════════════ -->
+<div class="page" id="page-history">
+  <div class="hdr">
+    <button class="hdr-back" onclick="goBack()">←</button>
+    <div class="hdr-title">📜 История</div>
+  </div>
+  <div class="content">
+    <div id="history-list">
+      <div class="loading"><div class="spinner"></div>Загружаем...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     PAGE: REFERRAL
+══════════════════════════════════════════ -->
+<div class="page" id="page-referral">
+  <div class="hdr">
+    <button class="hdr-back" onclick="goBack()">←</button>
+    <div class="hdr-title">👥 Рефералы</div>
+  </div>
+  <div class="content">
+    <div class="stats-row" style="margin-bottom:16px;">
+      <div class="stat-box"><div class="stat-val" id="ref-count">0</div><div class="stat-lbl">Приглашено</div></div>
+      <div class="stat-box"><div class="stat-val" id="ref-earned">0₽</div><div class="stat-lbl">Заработано</div></div>
+    </div>
+
+    <div class="card card-glass" style="margin-bottom:16px;">
+      <div style="font-size:13px;color:var(--text2);margin-bottom:8px;">💰 Бонус за реферала</div>
+      <div style="font-family:'Space Mono',monospace;font-size:28px;font-weight:700;color:var(--green);">50₽</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:4px;">За каждого, кто купит подписку</div>
+    </div>
+
+    <div class="section-title">Ваша ссылка</div>
+    <div class="ref-link" id="ref-link" onclick="copyRefLink()">Загружаем...</div>
+    <button class="btn btn-primary" onclick="copyRefLink()">📋 Скопировать ссылку</button>
+
+    <div class="alert alert-info" style="margin-top:16px;">
+      ℹ️ Бонус зачисляется автоматически после первой покупки реферала
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     PAGE: PROMO
+══════════════════════════════════════════ -->
+<div class="page" id="page-promo">
+  <div class="hdr">
+    <button class="hdr-back" onclick="goBack()">←</button>
+    <div class="hdr-title">🎟 Промокод</div>
+  </div>
+  <div class="content">
+    <div class="card" style="margin-bottom:16px;text-align:center;padding:24px 16px;">
+      <div style="font-size:40px;margin-bottom:8px;">🎟</div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:4px;">Активировать промокод</div>
+      <div style="font-size:13px;color:var(--text2);">Введите код и получите бонус на баланс</div>
+    </div>
+
+    <div class="input-wrap">
+      <label>Промокод</label>
+      <input class="inp" type="text" id="promo-input" placeholder="ВВЕДИТЕ КОД" style="text-transform:uppercase;letter-spacing:.08em;font-size:18px;font-weight:700;" oninput="this.value=this.value.toUpperCase()">
+    </div>
+    <button class="btn btn-primary" onclick="activatePromo()">✅ Активировать</button>
+    <div id="promo-result" style="margin-top:12px;display:none;"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     PAGE: SETTINGS
+══════════════════════════════════════════ -->
+<div class="page" id="page-settings">
+  <div class="hdr">
+    <button class="hdr-back" onclick="goBack()">←</button>
+    <div class="hdr-title">⚙️ Настройки</div>
+  </div>
+  <div class="content">
+    <div class="section-title">Язык</div>
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+        <button class="btn btn-secondary btn-sm" id="lang-ru" onclick="setLang('ru')" style="border-color:var(--accent);color:var(--accent);">🇷🇺 RU</button>
+        <button class="btn btn-secondary btn-sm" id="lang-en" onclick="setLang('en')">🇬🇧 EN</button>
+        <button class="btn btn-secondary btn-sm" id="lang-zh" onclick="setLang('zh')">🇨🇳 ZH</button>
+      </div>
+    </div>
+
+    <div class="section-title">Подписка</div>
+    <div class="card">
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-lbl">🔄 Автопродление</div>
+          <div class="toggle-sub">Автоматически продлевать за 1 день до конца</div>
+        </div>
+        <button class="toggle on" id="toggle-autorenewal" onclick="toggleAutoRenewal()"></button>
+      </div>
+    </div>
+
+    <div class="section-title">Информация</div>
+    <div class="card">
+      <div class="info-row" onclick="openLink('https://telegra.ph/Politika-konfidencialnosti-08-15-17')" style="cursor:pointer;">
+        <span class="info-lbl">📄 Политика конфиденциальности</span>
+        <span style="color:var(--text2);">→</span>
+      </div>
+      <div class="info-row" onclick="openLink('https://telegra.ph/Polzovatelskoe-soglashenie-08-15-10')" style="cursor:pointer;">
+        <span class="info-lbl">📋 Пользовательское соглашение</span>
+        <span style="color:var(--text2);">→</span>
+      </div>
+      <div class="info-row" onclick="nav('support')" style="cursor:pointer;">
+        <span class="info-lbl">💬 Поддержка</span>
+        <span style="color:var(--text2);">→</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     PAGE: SUPPORT
+══════════════════════════════════════════ -->
+<div class="page" id="page-support">
+  <div class="hdr">
+    <button class="hdr-back" onclick="goBack()">←</button>
+    <div class="hdr-title">💬 Поддержка</div>
+  </div>
+  <div class="content">
+    <div class="card card-glass" style="text-align:center;padding:28px 16px;margin-bottom:16px;">
+      <div style="font-size:48px;margin-bottom:12px;">🚀</div>
+      <div style="font-size:18px;font-weight:800;margin-bottom:6px;">Быстрая поддержка</div>
+      <div style="font-size:14px;color:var(--text2);">Отвечаем в течение нескольких минут</div>
+    </div>
+    <button class="btn btn-primary" onclick="openLink('https://t.me/ascend404')">💬 Написать в поддержку</button>
+    <div style="height:10px;"></div>
+    <button class="btn btn-secondary" onclick="openLink('https://t.me/repvpnservice')">⭐ Отзывы клиентов</button>
+
+    <div class="section-title">FAQ</div>
+    <div class="card">
+      <div class="info-row" style="flex-direction:column;align-items:flex-start;gap:4px;">
+        <span style="font-weight:700;">Как подключиться на Android?</span>
+        <span style="font-size:12px;color:var(--text2);">Скачайте v2RayTun → + → Импорт из буфера</span>
+      </div>
+      <div class="info-row" style="flex-direction:column;align-items:flex-start;gap:4px;">
+        <span style="font-weight:700;">Как подключиться на iPhone?</span>
+        <span style="font-size:12px;color:var(--text2);">Скачайте Streisand → вставьте ссылку подписки</span>
+      </div>
+      <div class="info-row" style="flex-direction:column;align-items:flex-start;gap:4px;border-bottom:none;">
+        <span style="font-weight:700;">Как подключиться на Windows?</span>
+        <span style="font-size:12px;color:var(--text2);">Скачайте Hiddify → добавьте подписку по ссылке</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     PAGE: DEVICE CONNECT
+══════════════════════════════════════════ -->
+<div class="page" id="page-device">
+  <div class="hdr">
+    <button class="hdr-back" onclick="goBack()">←</button>
+    <div class="hdr-title">📱 Подключение</div>
+  </div>
+  <div class="content">
+    <div class="alert alert-info" style="margin-bottom:16px;">
+      Выберите устройство для получения инструкции по подключению
+    </div>
+    <div class="device-grid">
+      <div class="device-btn" onclick="showDeviceApps('android')">
+        <span class="icon">📱</span>
+        <span class="name">Android</span>
+      </div>
+      <div class="device-btn" onclick="showDeviceApps('ios')">
+        <span class="icon">🍎</span>
+        <span class="name">iPhone</span>
+      </div>
+      <div class="device-btn" onclick="showDeviceApps('windows')">
+        <span class="icon">🖥</span>
+        <span class="name">Windows</span>
+      </div>
+      <div class="device-btn" onclick="showDeviceApps('macos')">
+        <span class="icon">🍏</span>
+        <span class="name">macOS</span>
+      </div>
+    </div>
+    <div id="device-apps-block" style="display:none;margin-top:16px;"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     PAGE: ADMIN
+══════════════════════════════════════════ -->
+<div class="page" id="page-admin">
+  <div class="hdr">
+    <button class="hdr-back" onclick="goBack()">←</button>
+    <div class="hdr-title">👑 Админ</div>
+    <div class="hdr-badge">ADMIN</div>
+  </div>
+  <div class="content">
+    <div class="admin-grid">
+      <div class="admin-stat accent"><div class="val" id="adm-users">—</div><div class="lbl">👤 Пользователей</div></div>
+      <div class="admin-stat green"><div class="val" id="adm-active">—</div><div class="lbl">✅ Активных</div></div>
+      <div class="admin-stat yellow"><div class="val" id="adm-trial">—</div><div class="lbl">🎁 Пробных</div></div>
+      <div class="admin-stat red"><div class="val" id="adm-frozen">—</div><div class="lbl">❄️ Заморожено</div></div>
+    </div>
+    <div class="card" style="margin-bottom:12px;">
+      <div class="info-row"><span class="info-lbl">💰 Оборот Platega</span><span class="info-val" id="adm-payments">—</span></div>
+      <div class="info-row"><span class="info-lbl">🏦 Балансы юзеров</span><span class="info-val" id="adm-balances">—</span></div>
+    </div>
+
+    <div class="section-title">Действия</div>
+    <button class="btn btn-secondary" style="margin-bottom:8px;" onclick="nav('admin-users')">👤 Список пользователей</button>
+    <button class="btn btn-secondary" style="margin-bottom:8px;" onclick="nav('admin-broadcast')">📢 Рассылка</button>
+    <button class="btn btn-secondary" style="margin-bottom:8px;" onclick="nav('admin-promo')">🎟 Промокоды</button>
+    <button class="btn btn-danger btn-sm" onclick="adminExportCSV()">📥 Экспорт CSV</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     PAGE: ADMIN USERS
+══════════════════════════════════════════ -->
+<div class="page" id="page-admin-users">
+  <div class="hdr">
+    <button class="hdr-back" onclick="goBack()">←</button>
+    <div class="hdr-title">👤 Пользователи</div>
+  </div>
+  <div class="content">
+    <div id="admin-users-list">
+      <div class="loading"><div class="spinner"></div>Загружаем...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     PAGE: ADMIN BROADCAST
+══════════════════════════════════════════ -->
+<div class="page" id="page-admin-broadcast">
+  <div class="hdr">
+    <button class="hdr-back" onclick="goBack()">←</button>
+    <div class="hdr-title">📢 Рассылка</div>
+  </div>
+  <div class="content">
+    <div class="input-wrap">
+      <label>Текст сообщения (HTML)</label>
+      <textarea class="inp" id="broadcast-text" rows="6" placeholder="Введите текст рассылки..."></textarea>
+    </div>
+    <div class="alert alert-warn" style="margin-bottom:16px;">⚠️ Сообщение будет отправлено всем пользователям</div>
+    <button class="btn btn-primary" onclick="sendBroadcast()">📢 Отправить рассылку</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     PAGE: ADMIN PROMO
+══════════════════════════════════════════ -->
+<div class="page" id="page-admin-promo">
+  <div class="hdr">
+    <button class="hdr-back" onclick="goBack()">←</button>
+    <div class="hdr-title">🎟 Промокоды</div>
+  </div>
+  <div class="content">
+    <div class="section-title">Создать промокод</div>
+    <div class="card" style="margin-bottom:16px;">
+      <div class="input-wrap">
+        <label>Код (оставьте пустым для авто)</label>
+        <input class="inp" type="text" id="new-promo-code" placeholder="PROMO2025" style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()">
+      </div>
+      <div class="input-wrap">
+        <label>Сумма (₽)</label>
+        <input class="inp" type="number" id="new-promo-amount" placeholder="100">
+      </div>
+      <div class="input-wrap">
+        <label>Лимит использований (0 = безлимит)</label>
+        <input class="inp" type="number" id="new-promo-uses" placeholder="10" value="1">
+      </div>
+      <button class="btn btn-primary" onclick="createPromo()">✅ Создать промокод</button>
+    </div>
+
+    <div class="section-title">Активные промокоды</div>
+    <div id="promo-list">
+      <div class="loading"><div class="spinner"></div>Загружаем...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     BOTTOM NAV
+══════════════════════════════════════════ -->
+<nav class="bnav" id="bottom-nav">
+  <button class="bnav-btn active" id="nav-home" onclick="navRoot('home')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    Главная
+    <div class="bnav-dot"></div>
+  </button>
+  <button class="bnav-btn" id="nav-subscription" onclick="navRoot('subscription')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8h10M7 12h7M7 16h5"/></svg>
+    Подписка
+    <div class="bnav-dot"></div>
+  </button>
+  <button class="bnav-btn" id="nav-buy" onclick="navRoot('buy')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+    Купить
+    <div class="bnav-dot"></div>
+  </button>
+  <button class="bnav-btn" id="nav-profile" onclick="navRoot('profile')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    Профиль
+    <div class="bnav-dot"></div>
+  </button>
+  <button class="bnav-btn" id="nav-support" onclick="navRoot('support')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    Поддержка
+    <div class="bnav-dot"></div>
+  </button>
+</nav>
+
+<script>
+// ══════════════════════════════════════
+//  TELEGRAM WEB APP INIT
+// ══════════════════════════════════════
+const tg = window.Telegram?.WebApp;
+if (tg) {
+  tg.ready();
+  tg.expand();
+  tg.enableClosingConfirmation();
+  document.documentElement.style.setProperty('--tg-bg', tg.colorScheme === 'dark' ? '#080b12' : '#080b12');
+}
+
+const BOT_API = 'https://wer7.duckdns.org:8080'; // Your bot's HTTP server
+const PLANS = {
+  '7d':  { days:7,  gb:30,  price:99,  label:'7 дней / 30 ГБ' },
+  '30d': { days:30, gb:100, price:249, label:'30 дней / 100 ГБ' },
+  '90d': { days:90, gb:300, price:599, label:'90 дней / 300 ГБ' }
+};
+
+// ══════════════════════════════════════
+//  APP STATE
+// ══════════════════════════════════════
+const state = {
+  tgId: tg?.initDataUnsafe?.user?.id || 0,
+  tgUser: tg?.initDataUnsafe?.user || { first_name:'Demo', id:0 },
+  balance: 0,
+  subscription: null,
+  history: [],
+  referrals: { count:0, earned:0 },
+  settings: { lang:'ru', autorenewal:true },
+  isAdmin: false,
+  selectedPlan: null,
+  pendingTxId: null,
+  // Navigation
+  currentPage: 'home',
+  pageStack: [],
+  // Demo data flag
+  demoMode: true,
+};
+
+// ══════════════════════════════════════
+//  DEMO DATA (Replace with real API calls)
+// ══════════════════════════════════════
+function loadDemoData() {
+  state.balance = 150;
+  state.subscription = {
+    active: true,
+    frozen: false,
+    expire: new Date(Date.now() + 12 * 86400000),
+    expire_str: formatDate(new Date(Date.now() + 12 * 86400000)),
+    days_left: 12,
+    used_gb: 42,
+    limit_gb: 100,
+    plan: '30d',
+    sub_url: 'https://wer7.duckdns.org:8000/sub/tg_demo',
+    username: 'tg_demo_abc123',
+    protocol: 'VLESS TCP REALITY'
+  };
+  state.history = [
+    { type:'credit', amount:249, comment:'Платёж Platega', ts:'2025-03-10' },
+    { type:'debit',  amount:249, comment:'Подписка 30д/100ГБ', ts:'2025-03-10' },
+    { type:'credit', amount:50,  comment:'Реферальный бонус', ts:'2025-03-08' },
+    { type:'credit', amount:100, comment:'Промокод SPRING25', ts:'2025-03-01' },
+    { type:'debit',  amount:99,  comment:'Подписка 7д/30ГБ', ts:'2025-02-20' },
+  ];
+  state.referrals = { count:3, earned:150 };
+  state.isAdmin = true; // show admin tab for demo
+}
+
+function formatDate(d) {
+  return d.toLocaleDateString('ru-RU', { day:'2-digit', month:'2-digit', year:'numeric' });
+}
+function fmtBytes(gb) {
+  if (gb < 1) return `${(gb*1024).toFixed(0)} МБ`;
+  return `${gb.toFixed(1)} ГБ`;
+}
+
+// ══════════════════════════════════════
+//  REAL API (stub — wire to your bot)
+// ══════════════════════════════════════
+async function apiCall(endpoint, data = {}) {
+  // In production, call your bot's HTTP server with initData auth
+  // const initData = tg?.initData || '';
+  // const r = await fetch(`${BOT_API}/webapp${endpoint}`, {
+  //   method:'POST', headers:{'Content-Type':'application/json','X-Init-Data':initData},
+  //   body:JSON.stringify({tg_id: state.tgId, ...data})
+  // });
+  // return r.json();
+
+  // Demo mode responses
+  await new Promise(r => setTimeout(r, 600));
+  switch(endpoint) {
+    case '/balance':    return { balance: state.balance };
+    case '/subscription': return { subscription: state.subscription };
+    case '/history':    return { history: state.history };
+    case '/referrals':  return { count: state.referrals.count, earned: state.referrals.earned };
+    case '/stats':      return { total_users:1247, active_subs:389, trial_subs:42, frozen_subs:18, total_payments:182450, total_balance:34200 };
+    case '/users':      return { users: [ {tg_id:123456, expire:'2025-03-22', plan:'30d', status:'active', balance:150}, {tg_id:789012, expire:'2025-02-28', plan:'7d', status:'expired', balance:0}, {tg_id:345678, expire:'2025-04-01', plan:'90d', status:'frozen', balance:300} ] };
+    case '/promos':     return { promos: [ {code:'SPRING25', amount:100, max_uses:50, use_count:18}, {code:'VIP2025', amount:250, max_uses:0, use_count:7} ] };
+    case '/promo/use':
+      if (data.code === 'DEMO50') { state.balance += 50; return { ok:true, amount:50 }; }
+      return { ok:false, error:'not_found' };
+    case '/buy':
+      const plan = PLANS[data.plan_id];
+      if (state.balance >= plan.price) {
+        state.balance -= plan.price;
+        state.subscription = { active:true, frozen:false, expire:new Date(Date.now()+plan.days*86400000), expire_str: formatDate(new Date(Date.now()+plan.days*86400000)), days_left:plan.days, used_gb:0, limit_gb:plan.gb, plan:data.plan_id, sub_url:'https://wer7.duckdns.org:8000/sub/tg_demo', username:'tg_demo', protocol:'VLESS TCP REALITY' };
+        return { ok:true, subscription: state.subscription };
+      }
+      return { ok:false, error:'not_enough' };
+    case '/trial':
+      if (state.subscription) return { ok:false, error:'has_sub' };
+      state.subscription = { active:true, frozen:false, expire:new Date(Date.now()+86400000), expire_str: formatDate(new Date(Date.now()+86400000)), days_left:1, used_gb:0, limit_gb:0, plan:'trial', sub_url:'https://wer7.duckdns.org:8000/sub/tg_demo', username:'tg_demo_trial', protocol:'VLESS TCP REALITY', is_trial:true };
+      return { ok:true, subscription: state.subscription };
+    case '/freeze':
+      if (!state.subscription) return { ok:false };
+      state.subscription.frozen = true; state.subscription.active = false;
+      return { ok:true, days_left: state.subscription.days_left };
+    case '/unfreeze':
+      if (!state.subscription) return { ok:false };
+      state.subscription.frozen = false; state.subscription.active = true;
+      return { ok:true, expire_str: state.subscription.expire_str };
+    case '/payment/create':
+      state.pendingTxId = 'TX_' + Math.random().toString(36).slice(2).toUpperCase();
+      return { ok:true, transaction_id: state.pendingTxId, redirect_url: 'https://app.platega.io/pay/demo' };
+    case '/payment/check':
+      // Simulate payment confirmed after check
+      if (state.pendingTxId === data.tx_id) {
+        state.balance += data.amount || 249;
+        state.pendingTxId = null;
+        return { ok:true, status:'CONFIRMED', new_balance: state.balance };
+      }
+      return { ok:false, status:'PENDING' };
+    case '/autorenewal':
+      state.settings.autorenewal = data.enabled;
+      return { ok:true };
+    case '/broadcast':
+      return { ok:true, sent:1247, failed:3 };
+    case '/promo/create':
+      return { ok:true, code: data.code || 'AUTO' + Math.random().toString(36).slice(2,6).toUpperCase() };
+    case '/promo/delete':
+      return { ok:true };
+    default: return { ok:true };
+  }
+}
+
+// ══════════════════════════════════════
+//  NAVIGATION
+// ══════════════════════════════════════
+const ROOT_PAGES = ['home','subscription','buy','profile','support'];
+const NAV_PAGES  = { home:'nav-home', subscription:'nav-subscription', buy:'nav-buy', profile:'nav-profile', support:'nav-support' };
+
+function nav(pageId) {
+  const current = document.querySelector('.page.active');
+  if (current) { current.classList.remove('active'); }
+  state.pageStack.push(state.currentPage);
+  state.currentPage = pageId;
+  const target = document.getElementById(`page-${pageId}`);
+  if (target) {
+    target.classList.add('active');
+    onPageEnter(pageId);
+  }
+  // Hide bottom nav for sub-pages
+  const isRoot = ROOT_PAGES.includes(pageId);
+  document.getElementById('bottom-nav').style.display = isRoot ? 'flex' : 'none';
+  // Update nav highlight
+  Object.keys(NAV_PAGES).forEach(k => {
+    document.getElementById(NAV_PAGES[k])?.classList.toggle('active', k === pageId);
+  });
+}
+
+function navRoot(pageId) {
+  // Close all non-root pages
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  state.pageStack = [];
+  state.currentPage = pageId;
+  const target = document.getElementById(`page-${pageId}`);
+  if (target) { target.classList.add('active'); onPageEnter(pageId); }
+  document.getElementById('bottom-nav').style.display = 'flex';
+  Object.keys(NAV_PAGES).forEach(k => {
+    document.getElementById(NAV_PAGES[k])?.classList.toggle('active', k === pageId);
+  });
+}
+
+function goBack() {
+  const prev = state.pageStack.pop();
+  if (!prev) { navRoot('home'); return; }
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  state.currentPage = prev;
+  const target = document.getElementById(`page-${prev}`);
+  if (target) { target.classList.add('active'); }
+  const isRoot = ROOT_PAGES.includes(prev);
+  document.getElementById('bottom-nav').style.display = isRoot ? 'flex' : 'none';
+  Object.keys(NAV_PAGES).forEach(k => {
+    document.getElementById(NAV_PAGES[k])?.classList.toggle('active', k === prev);
+  });
+}
+
+// ══════════════════════════════════════
+//  PAGE ENTER HANDLERS
+// ══════════════════════════════════════
+async function onPageEnter(pageId) {
+  switch(pageId) {
+    case 'home':         renderHome(); break;
+    case 'subscription': renderSubscription(); break;
+    case 'buy':          renderBuy(); break;
+    case 'profile':      renderProfile(); break;
+    case 'history':      renderHistory(); break;
+    case 'referral':     renderReferral(); break;
+    case 'admin':        renderAdmin(); break;
+    case 'admin-users':  renderAdminUsers(); break;
+    case 'admin-promo':  renderAdminPromos(); break;
+    case 'topup':        renderTopup(); break;
+  }
+}
+
+// ══════════════════════════════════════
+//  HOME
+// ══════════════════════════════════════
+function renderHome() {
+  // Balance
+  document.getElementById('home-balance').textContent = `${state.balance}₽`;
+  const sub = state.subscription;
+
+  if (sub && (sub.active || sub.frozen)) {
+    // Status badge
+    const badge = document.getElementById('home-status-badge');
+    if (sub.frozen) {
+      badge.className = 'status-badge frozen';
+      badge.innerHTML = '<span class="dot"></span> Заморожена';
+    } else {
+      badge.className = 'status-badge active';
+      badge.innerHTML = '<span class="dot"></span> Активна';
+    }
+    // Details
+    document.getElementById('home-sub-details').style.display = 'block';
+    document.getElementById('home-no-sub').style.display = 'none';
+    document.getElementById('home-expire').textContent = sub.expire_str + ` (${sub.days_left} дн.)`;
+
+    if (sub.limit_gb > 0) {
+      const pct = Math.min(sub.used_gb / sub.limit_gb * 100, 100);
+      document.getElementById('home-traffic').textContent = `${fmtBytes(sub.used_gb)} / ${fmtBytes(sub.limit_gb)}`;
+      const bar = document.getElementById('home-progress-bar');
+      bar.style.width = pct + '%';
+      bar.className = 'progress-fill' + (pct >= 90 ? ' danger' : pct >= 70 ? ' warn' : '');
+      document.getElementById('home-progress-wrap').style.display = 'block';
+    } else {
+      document.getElementById('home-traffic').textContent = 'Безлимит';
+      document.getElementById('home-progress-wrap').style.display = 'none';
+    }
+  } else {
+    const badge = document.getElementById('home-status-badge');
+    badge.className = 'status-badge inactive';
+    badge.innerHTML = '<span class="dot"></span> Нет подписки';
+    document.getElementById('home-sub-details').style.display = 'none';
+    document.getElementById('home-no-sub').style.display = 'block';
+  }
+
+  // Trial button
+  const trialWrap = document.getElementById('trial-btn-wrap');
+  trialWrap.style.display = (sub ? 'none' : 'block');
+
+  // Admin tab
+  if (state.isAdmin) {
+    const existingAdminBtn = document.getElementById('admin-nav-btn');
+    if (!existingAdminBtn) {
+      const nav = document.getElementById('bottom-nav');
+      const btn = document.createElement('button');
+      btn.id = 'admin-nav-btn';
+      btn.className = 'bnav-btn';
+      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>Админ<div class="bnav-dot"></div>`;
+      btn.onclick = () => navRoot('admin');
+      nav.appendChild(btn);
+      NAV_PAGES['admin'] = 'admin-nav-btn';
+    }
+  }
+}
+
+// ══════════════════════════════════════
+//  SUBSCRIPTION
+// ══════════════════════════════════════
+async function renderSubscription() {
+  const el = document.getElementById('sub-content');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div>Загружаем...</div>';
+  const sub = state.subscription;
+
+  if (!sub || (!sub.active && !sub.frozen)) {
+    el.innerHTML = `
+      <div class="empty">
+        <div class="big">📋</div>
+        <div class="title">Нет активной подписки</div>
+        <div class="sub">Оформите подписку для доступа к VPN</div>
+      </div>
+      <button class="btn btn-primary" onclick="navRoot('buy')">🛒 Купить подписку</button>`;
+    return;
+  }
+
+  const pct = sub.limit_gb > 0 ? Math.min(sub.used_gb / sub.limit_gb * 100, 100) : 0;
+  const statusClass = sub.frozen ? 'frozen' : 'active';
+  const statusText = sub.frozen ? '❄️ Заморожена' : '✅ Активна';
+
+  el.innerHTML = `
+    <div class="card card-glass" style="margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div class="status-badge ${statusClass}"><span class="dot"></span>${statusText}</div>
+        <div style="font-size:11px;color:var(--text2);">${sub.protocol}</div>
+      </div>
+      <div class="info-row"><span class="info-lbl">📅 Истекает</span><span class="info-val">${sub.expire_str}</span></div>
+      <div class="info-row"><span class="info-lbl">⏳ Осталось</span><span class="info-val">${sub.days_left} дней</span></div>
+      <div class="info-row" style="border-bottom:${sub.limit_gb > 0 ? '1px solid var(--border)' : 'none'};">
+        <span class="info-lbl">📦 Трафик</span>
+        <span class="info-val">${sub.limit_gb > 0 ? `${fmtBytes(sub.used_gb)} / ${fmtBytes(sub.limit_gb)}` : 'Безлимит'}</span>
+      </div>
+      ${sub.limit_gb > 0 ? `
+        <div style="margin-top:12px;">
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:6px;">
+            <span>Использовано ${pct.toFixed(1)}%</span>
+            <span>${fmtBytes(sub.limit_gb - sub.used_gb)} осталось</span>
+          </div>
+          <div class="progress-wrap"><div class="progress-fill${pct>=90?' danger':pct>=70?' warn':''}" style="width:${pct}%"></div></div>
+        </div>` : ''}
+    </div>
+
+    <button class="btn btn-primary" style="margin-bottom:8px;" onclick="nav('device')">📲 Подключить устройство</button>
+    <div class="btn-row" style="margin-bottom:8px;">
+      <button class="btn btn-secondary" onclick="navRoot('buy')">🔄 Продлить</button>
+      ${sub.frozen
+        ? `<button class="btn btn-success" onclick="unfreezeSub()">▶️ Разморозить</button>`
+        : `<button class="btn btn-secondary" onclick="freezeSub()">❄️ Заморозить</button>`}
+    </div>
+    ${!sub.frozen ? `<button class="btn btn-secondary btn-sm" onclick="resetTraffic()">♻️ Сбросить трафик</button>` : ''}
+
+    <div class="section-title" style="margin-top:20px;">Ссылка подписки</div>
+    <div class="ref-link" onclick="copySubUrl()" style="cursor:pointer;" title="Нажмите для копирования">${sub.sub_url}</div>
+    <button class="btn btn-secondary btn-sm" onclick="copySubUrl()">📋 Скопировать ссылку</button>`;
+}
+
+function refreshSub() { renderSubscription(); }
+
+async function freezeSub() {
+  const r = await apiCall('/freeze');
+  if (r.ok) {
+    if (state.subscription) { state.subscription.frozen = true; state.subscription.active = false; }
+    showToast(`❄️ Заморожено, осталось ${r.days_left} дн.`);
+    renderSubscription();
+    renderHome();
+  }
+}
+
+async function unfreezeSub() {
+  const r = await apiCall('/unfreeze');
+  if (r.ok) {
+    if (state.subscription) { state.subscription.frozen = false; state.subscription.active = true; }
+    showToast('▶️ Подписка разморожена!');
+    renderSubscription();
+    renderHome();
+  }
+}
+
+function resetTraffic() {
+  showToast('♻️ Трафик сброшен!');
+  if (state.subscription) { state.subscription.used_gb = 0; }
+  renderSubscription();
+}
+
+function copySubUrl() {
+  const url = state.subscription?.sub_url || '';
+  navigator.clipboard?.writeText(url).then(() => showToast('📋 Ссылка скопирована'));
+}
+
+// ══════════════════════════════════════
+//  BUY
+// ══════════════════════════════════════
+function renderBuy() {
+  document.getElementById('buy-bal-badge').textContent = `${state.balance}₽`;
+  document.getElementById('plan-confirm-block').style.display = 'none';
+  document.querySelectorAll('.plan-card').forEach(c => c.classList.remove('selected'));
+  state.selectedPlan = null;
+}
+
+function selectPlan(planId) {
+  state.selectedPlan = planId;
+  document.querySelectorAll('.plan-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById(`plan-${planId}`)?.classList.add('selected');
+
+  const plan = PLANS[planId];
+  const bal = state.balance;
+  const enough = bal >= plan.price;
+
+  document.getElementById('plan-confirm-card').innerHTML = `
+    <div style="font-size:13px;color:var(--text2);margin-bottom:8px;">Выбранный тариф</div>
+    <div style="font-size:17px;font-weight:800;margin-bottom:4px;">${plan.label}</div>
+    <div style="display:flex;justify-content:space-between;margin:10px 0;">
+      <span style="font-size:13px;color:var(--text2);">💰 Стоимость</span>
+      <span style="font-family:'Space Mono',monospace;font-weight:700;color:var(--accent);">${plan.price}₽</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:10px;">
+      <span style="font-size:13px;color:var(--text2);">💳 Ваш баланс</span>
+      <span style="font-family:'Space Mono',monospace;font-weight:700;color:${enough?'var(--green)':'var(--red)'};">${bal}₽</span>
+    </div>
+    <div class="alert ${enough ? 'alert-success' : 'alert-warn'}">
+      ${enough ? '✅ Достаточно средств' : `❌ Не хватает ${plan.price - bal}₽`}
+    </div>`;
+
+  document.getElementById('btn-buy-balance').disabled = !enough;
+  document.getElementById('btn-buy-balance').style.opacity = enough ? '1' : '.5';
+  document.getElementById('btn-topup-for-buy').style.display = enough ? 'none' : 'block';
+  document.getElementById('plan-confirm-block').style.display = 'block';
+  document.getElementById('plan-confirm-block').scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+async function buyFromBalance() {
+  if (!state.selectedPlan) return;
+  const plan = PLANS[state.selectedPlan];
+  showToast('⏳ Активируем...');
+  const r = await apiCall('/buy', { plan_id: state.selectedPlan });
+  if (r.ok) {
+    state.balance -= plan.price;
+    state.subscription = r.subscription;
+    showToast(`🎉 Подписка активирована до ${r.subscription.expire_str}!`);
+    renderHome();
+    setTimeout(() => { navRoot('subscription'); }, 800);
+  } else if (r.error === 'not_enough') {
+    showToast('❌ Недостаточно средств');
+  } else {
+    showToast('❌ Ошибка активации');
+  }
+}
+
+// ══════════════════════════════════════
+//  TRIAL
+// ══════════════════════════════════════
+async function activateTrial() {
+  const btn = document.getElementById('trial-btn');
+  btn.disabled = true; btn.textContent = '⏳ Активируем...';
+  const r = await apiCall('/trial');
+  if (r.ok) {
+    state.subscription = r.subscription;
+    showToast('🎁 Пробный период активирован!');
+    renderHome();
+    document.getElementById('trial-btn-wrap').style.display = 'none';
+    setTimeout(() => nav('device'), 500);
+  } else if (r.error === 'has_sub') {
+    showToast('❌ У вас уже есть подписка');
+    btn.disabled = false; btn.textContent = '🎁 Пробный период (1 день бесплатно)';
+  } else {
+    showToast('❌ Ошибка активации');
+    btn.disabled = false; btn.textContent = '🎁 Пробный период (1 день бесплатно)';
+  }
+}
+
+// ══════════════════════════════════════
+//  TOPUP
+// ══════════════════════════════════════
+function renderTopup() {
+  document.getElementById('topup-balance').textContent = `${state.balance}₽`;
+  document.getElementById('payment-status-block').style.display = 'none';
+}
+
+function setTopup(amount) {
+  document.getElementById('topup-amount').value = amount;
+}
+
+async function createPayment(method) {
+  const amount = parseFloat(document.getElementById('topup-amount').value);
+  if (!amount || amount < 10) { showToast('❌ Минимум 10₽'); return; }
+
+  showToast('⏳ Создаём счёт...');
+  const r = await apiCall('/payment/create', { amount, method });
+  if (r.ok) {
+    state.pendingTxId = r.transaction_id;
+    state.pendingAmount = amount;
+    document.getElementById('payment-status-block').style.display = 'block';
+    document.getElementById('payment-status-text').textContent = `⏳ Счёт создан. Нажмите кнопку для оплаты ${amount}₽`;
+    // Open payment URL in browser
+    if (r.redirect_url) {
+      tg?.openLink ? tg.openLink(r.redirect_url) : window.open(r.redirect_url, '_blank');
+    }
+    showToast('💳 Перейдите на страницу оплаты');
+  } else {
+    showToast('❌ Ошибка создания счёта');
+  }
+}
+
+async function checkPayment() {
+  if (!state.pendingTxId) { showToast('❌ Нет активного платежа'); return; }
+  showToast('⏳ Проверяем...');
+  const r = await apiCall('/payment/check', { tx_id: state.pendingTxId, amount: state.pendingAmount });
+  if (r.ok && r.status === 'CONFIRMED') {
+    state.balance = r.new_balance;
+    document.getElementById('topup-balance').textContent = `${state.balance}₽`;
+    document.getElementById('payment-status-block').style.display = 'none';
+    showToast(`✅ Зачислено ${state.pendingAmount}₽!`);
+    renderHome();
+    state.pendingTxId = null;
+  } else {
+    showToast('⏳ Оплата ещё не поступила');
+  }
+}
+
+// ══════════════════════════════════════
+//  PROFILE
+// ══════════════════════════════════════
+function renderProfile() {
+  const user = state.tgUser;
+  const name = user.first_name + (user.last_name ? ' ' + user.last_name : '');
+  document.getElementById('profile-avatar').textContent = name.charAt(0).toUpperCase();
+  document.getElementById('profile-name').textContent = name;
+  document.getElementById('profile-id').textContent = `ID: ${user.id || state.tgId}`;
+  document.getElementById('profile-balance').textContent = `${state.balance}₽`;
+  document.getElementById('profile-refs').textContent = state.referrals.count;
+}
+
+// ══════════════════════════════════════
+//  HISTORY
+// ══════════════════════════════════════
+async function renderHistory() {
+  const el = document.getElementById('history-list');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div>Загружаем...</div>';
+  const data = await apiCall('/history');
+  const history = data.history || state.history;
+
+  if (!history.length) {
+    el.innerHTML = '<div class="empty"><div class="big">📜</div><div class="title">Нет операций</div><div class="sub">Здесь будет история пополнений и списаний</div></div>';
+    return;
+  }
+
+  el.innerHTML = '<div class="card">' + history.map(tx => `
+    <div class="tx-row">
+      <div class="tx-icon ${tx.type}">${tx.type === 'credit' ? '➕' : '➖'}</div>
+      <div class="tx-body">
+        <div class="tx-comment">${tx.comment}</div>
+        <div class="tx-date">${tx.ts}</div>
+      </div>
+      <div class="tx-amount ${tx.type}">${tx.type === 'credit' ? '+' : '−'}${tx.amount}₽</div>
+    </div>`).join('') + '</div>';
+}
+
+// ══════════════════════════════════════
+//  REFERRAL
+// ══════════════════════════════════════
+async function renderReferral() {
+  document.getElementById('ref-count').textContent = state.referrals.count;
+  document.getElementById('ref-earned').textContent = `${state.referrals.earned}₽`;
+  const botUsername = 'YourVPNBot'; // Replace with your bot username
+  const refLink = `https://t.me/${botUsername}?start=ref_${state.tgId}`;
+  document.getElementById('ref-link').textContent = refLink;
+}
+
+async function copyRefLink() {
+  const botUsername = 'YourVPNBot';
+  const refLink = `https://t.me/${botUsername}?start=ref_${state.tgId}`;
+  await navigator.clipboard?.writeText(refLink);
+  showToast('📋 Ссылка скопирована!');
+}
+
+// ══════════════════════════════════════
+//  PROMO
+// ══════════════════════════════════════
+async function activatePromo() {
+  const code = document.getElementById('promo-input').value.trim().toUpperCase();
+  if (!code) { showToast('❌ Введите промокод'); return; }
+  showToast('⏳ Проверяем...');
+  const r = await apiCall('/promo/use', { code });
+  const el = document.getElementById('promo-result');
+  el.style.display = 'block';
+  if (r.ok) {
+    state.balance += r.amount;
+    el.innerHTML = `<div class="alert alert-success">✅ Промокод активирован! Зачислено <b>${r.amount}₽</b><br>Текущий баланс: <b>${state.balance}₽</b></div>`;
+    document.getElementById('promo-input').value = '';
+    renderHome();
+  } else {
+    const msgs = { not_found:'❌ Промокод не найден', used:'❌ Вы уже активировали этот промокод', exhausted:'❌ Лимит использований исчерпан' };
+    el.innerHTML = `<div class="alert alert-danger">${msgs[r.error] || '❌ Ошибка активации'}</div>`;
+  }
+}
+
+// ══════════════════════════════════════
+//  SETTINGS
+// ══════════════════════════════════════
+function setLang(lang) {
+  state.settings.lang = lang;
+  ['ru','en','zh'].forEach(l => {
+    const btn = document.getElementById(`lang-${l}`);
+    if (btn) { btn.style.borderColor = l === lang ? 'var(--accent)' : 'var(--border)'; btn.style.color = l === lang ? 'var(--accent)' : ''; }
+  });
+  showToast('✅ Язык сохранён');
+}
+
+async function toggleAutoRenewal() {
+  const toggle = document.getElementById('toggle-autorenewal');
+  state.settings.autorenewal = !state.settings.autorenewal;
+  toggle.classList.toggle('on', state.settings.autorenewal);
+  await apiCall('/autorenewal', { enabled: state.settings.autorenewal });
+  showToast(state.settings.autorenewal ? '✅ Автопродление включено' : '❌ Автопродление выключено');
+}
+
+// ══════════════════════════════════════
+//  DEVICE CONNECT
+// ══════════════════════════════════════
+const DEVICE_APPS = {
+  android: [
+    { name:'v2RayTun',  url:'v2raytun://import/{url}', icon:'🟢' },
+    { name:'Hiddify',   url:'hiddify://import/{url}',  icon:'🔵' }
+  ],
+  ios: [
+    { name:'Streisand', url:'streisand://import/{url}#VPN', icon:'⚫' },
+    { name:'Hiddify',   url:'hiddify://import/{url}',       icon:'🔵' }
+  ],
+  windows: [
+    { name:'Happ',    url:'happ://add/{url}',      icon:'🪟' },
+    { name:'Hiddify', url:'hiddify://import/{url}', icon:'🔵' }
+  ],
+  macos: [
+    { name:'Hiddify',   url:'hiddify://import/{url}',       icon:'🔵' },
+    { name:'Streisand', url:'streisand://import/{url}#VPN', icon:'⚫' }
+  ]
+};
+
+function showDeviceApps(device) {
+  const sub = state.subscription;
+  const block = document.getElementById('device-apps-block');
+  document.querySelectorAll('.device-btn').forEach((b,i) => {
+    const d = ['android','ios','windows','macos'][i];
+    b.classList.toggle('active', d === device);
+  });
+
+  if (!sub) {
+    block.style.display = 'block';
+    block.innerHTML = `<div class="alert alert-warn">⚠️ Нет активной подписки. <a href="#" onclick="navRoot('buy');return false;" style="color:var(--accent);">Купить →</a></div>`;
+    return;
+  }
+
+  const apps = DEVICE_APPS[device] || [];
+  const REDIRECT = 'https://apps.onlinehelper.top/?url=';
+  const subUrl = sub.sub_url;
+
+  block.style.display = 'block';
+  block.innerHTML = `
+    <div class="section-title">Приложения для ${device}</div>
+    ${apps.map(app => {
+      const deeplink = REDIRECT + encodeURIComponent(app.url.replace('{url}', subUrl));
+      return `<a href="${deeplink}" style="text-decoration:none;">
+        <div class="card" style="display:flex;align-items:center;gap:12px;margin-bottom:8px;cursor:pointer;">
+          <div style="font-size:28px;">${app.icon}</div>
+          <div>
+            <div style="font-size:15px;font-weight:700;">${app.name}</div>
+            <div style="font-size:12px;color:var(--text2);">Нажмите для импорта подписки</div>
+          </div>
+          <div style="margin-left:auto;color:var(--accent);font-size:18px;">→</div>
+        </div>
+      </a>`;
+    }).join('')}
+    <div class="alert alert-info">📋 Или скопируйте ссылку подписки вручную:<br><span style="font-family:monospace;word-break:break-all;font-size:11px;">${subUrl}</span></div>
+    <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard?.writeText('${subUrl}').then(()=>showToast('📋 Скопировано!'))">📋 Скопировать ссылку</button>`;
+}
+
+// ══════════════════════════════════════
+//  ADMIN
+// ══════════════════════════════════════
+async function renderAdmin() {
+  const r = await apiCall('/stats');
+  document.getElementById('adm-users').textContent    = r.total_users;
+  document.getElementById('adm-active').textContent   = r.active_subs;
+  document.getElementById('adm-trial').textContent    = r.trial_subs;
+  document.getElementById('adm-frozen').textContent   = r.frozen_subs;
+  document.getElementById('adm-payments').textContent = `${r.total_payments?.toFixed(0)}₽`;
+  document.getElementById('adm-balances').textContent = `${r.total_balance?.toFixed(0)}₽`;
+}
+
+async function renderAdminUsers() {
+  const el = document.getElementById('admin-users-list');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div>Загружаем...</div>';
+  const r = await apiCall('/users');
+  const users = r.users || [];
+  if (!users.length) { el.innerHTML = '<div class="empty"><div class="big">👤</div><div class="title">Нет пользователей</div></div>'; return; }
+
+  el.innerHTML = '<div class="card">' + users.map(u => {
+    const statusCls = u.status === 'active' ? 'ok' : u.status === 'frozen' ? 'frozen' : 'exp';
+    const statusTxt = u.status === 'active' ? 'Активен' : u.status === 'frozen' ? 'Заморожен' : 'Истёк';
+    const letter = String(u.tg_id).charAt(0).toUpperCase();
+    return `<div class="user-row">
+      <div class="user-ava">${letter}</div>
+      <div style="flex:1;min-width:0;">
+        <div class="user-name">ID: <span style="font-family:monospace;">${u.tg_id}</span></div>
+        <div class="user-id">до ${u.expire} · ${u.plan} · ${u.balance}₽</div>
+      </div>
+      <span class="user-badge ${statusCls}">${statusTxt}</span>
+    </div>`;
+  }).join('') + '</div>';
+}
+
+async function renderAdminPromos() {
+  const el = document.getElementById('promo-list');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div>Загружаем...</div>';
+  const r = await apiCall('/promos');
+  const promos = r.promos || [];
+  if (!promos.length) { el.innerHTML = '<div style="color:var(--text2);font-size:14px;padding:16px 0;">Промокодов нет</div>'; return; }
+  el.innerHTML = '<div class="card">' + promos.map(p => {
+    const uses = p.max_uses === 0 ? '♾' : `${p.use_count}/${p.max_uses}`;
+    return `<div class="info-row">
+      <div>
+        <div style="font-family:monospace;font-size:15px;font-weight:700;color:var(--accent);">${p.code}</div>
+        <div style="font-size:12px;color:var(--text2);">${p.amount}₽ · использований: ${uses}</div>
+      </div>
+      <button class="btn btn-danger btn-sm" style="width:auto;padding:6px 12px;" onclick="deletePromo('${p.code}')">🗑</button>
+    </div>`;
+  }).join('') + '</div>';
+}
+
+async function createPromo() {
+  const code = document.getElementById('new-promo-code').value.trim().toUpperCase() || null;
+  const amount = parseFloat(document.getElementById('new-promo-amount').value);
+  const uses = parseInt(document.getElementById('new-promo-uses').value) || 1;
+  if (!amount || amount <= 0) { showToast('❌ Введите сумму'); return; }
+  const r = await apiCall('/promo/create', { code, amount, max_uses:uses });
+  if (r.ok) {
+    showToast(`✅ Промокод ${r.code} создан!`);
+    document.getElementById('new-promo-code').value = '';
+    document.getElementById('new-promo-amount').value = '';
+    renderAdminPromos();
+  }
+}
+
+async function deletePromo(code) {
+  if (!confirm(`Удалить промокод ${code}?`)) return;
+  await apiCall('/promo/delete', { code });
+  showToast(`🗑 ${code} удалён`);
+  renderAdminPromos();
+}
+
+async function sendBroadcast() {
+  const text = document.getElementById('broadcast-text').value.trim();
+  if (!text) { showToast('❌ Введите текст'); return; }
+  if (!confirm('Отправить рассылку всем пользователям?')) return;
+  showToast('⏳ Отправляем...');
+  const r = await apiCall('/broadcast', { text });
+  if (r.ok) { showToast(`✅ Отправлено: ${r.sent}, ошибок: ${r.failed}`); document.getElementById('broadcast-text').value = ''; }
+}
+
+async function adminExportCSV() {
+  showToast('📥 CSV скачивается...');
+}
+
+// ══════════════════════════════════════
+//  UTILS
+// ══════════════════════════════════════
+function openLink(url) {
+  tg?.openLink ? tg.openLink(url) : window.open(url, '_blank');
+}
+
+let _toastTimer;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ══════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  loadDemoData();
+  renderHome();
+
+  // TG back button
+  if (tg) {
+    tg.BackButton.onClick(() => {
+      if (state.pageStack.length > 0) goBack();
+      else tg.close();
+    });
+    // Show/hide TG back button
+    const origNav = nav;
+    window.nav = (page) => {
+      origNav(page);
+      if (state.pageStack.length > 0) tg.BackButton.show();
+      else tg.BackButton.hide();
+    };
+  }
+});
+</script>
+</body>
+  </html>
